@@ -10,17 +10,21 @@
 # OpenIDEA 1.x — 0.1.x validated ids as `[a-z0-9][a-z0-9_-]*` and rejected it,
 # but 0.1.x could not sign a package at all, so a signed package implies 1.x.
 #
-# Manifest format 0.1 (`openidea-api`), which 1.x IDEs still read as a legacy
-# manifest. Kept instead of `engines.openidea` so the file stays longest-lived;
-# the marketplace category is derived from `contributes` either way.
+# Manifest format 0.2 (`engines.openidea`). The older 0.1 format still installs,
+# but `openidea-plugin index` — what the community registry runs — refuses it, so
+# a package that is going to be listed must be 0.2.
 id = "muecheack.catppuccin"
 name = "Catppuccin Theme"
 version = "1.0.0"
 description = "Catppuccin for OpenIDEA: Latte (light) plus Frappé, Macchiato and Mocha (dark), each setting 224 themeable tokens. Palette and style guide by the Catppuccin project (MIT)."
 authors = ["Catppuccin contributors (palette and style guide)"]
 homepage = "https://catppuccin.com"
+license = "MIT"
 change-notes = "1.0.0 — first release: all four flavours, UI and editor scheme."
-openidea-api = "0.1"
+# Marketplace categories (up to 3): languages, themes, icon-themes, linters,
+# vcs, ai, frameworks, tools, other.
+categories = ["themes"]
+engines.openidea = "^1.0"
 
 # One entry per theme; `editor-scheme` is merged over the theme's tokens
 # (IntelliJ's .theme.json + .icls pair). Reference: docs/plugins/themes.md.

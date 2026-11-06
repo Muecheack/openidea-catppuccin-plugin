@@ -1,20 +1,17 @@
 #!/usr/bin/env python3
-"""Check `plugin.toml` the way the installed OpenIDEA parses it.
+"""Check `plugin.toml` the way the OpenIDEA community registry parses it.
 
-`openidea-plugin check` is stricter than the IDE in no way, and it is *looser* in
-one: it accepts 1.x-only keys (`categories`, `engines.openidea`) that a 0.1.x IDE
-rejects outright with "unknown field". This script closes that gap — it encodes
-the manifest rules from the IDE's own source, so a package that would fail to
-install is caught here first.
+The IDE is lenient in places the registry is not, so "it installs" is not enough
+for a package that will be listed. This encodes `plugin.toml` in manifest format
+0.2 (`plugins/README.md` in the OpenIDEA repository, `RawManifest` in
+`crates/ide-extension/src/manifest.rs`) plus the registry's own rules
+(`scripts/registry.py` of `l0ng-ai/openidea-plugins`):
 
-Two rule sets are mixed on purpose, because this manifest is deliberately a 0.1
-one installed on a 1.x IDE:
-
-* top-level fields — the 0.1 set (`crates/ide-plugin/src/manifest.rs` at
-  v0.1.32), so no 1.x-only key sneaks in. 1.x reads it as a legacy manifest.
-* plugin id — the 1.x rule (`crates/ide-extension/src/manifest.rs` at v0.1.37):
-  dot-separated segments, e.g. `acme.tools`. A dot is required to sign the
-  package at all, since `pack --key` only signs `<publisher>.*`.
+* only 0.2 keys — a 0.1 manifest still *installs*, but `openidea-plugin index`,
+  which the registry runs, refuses it outright;
+* the plugin id must be `<publisher>.<name>` so the publisher may sign it, and be
+  dot-separated segments of `a-z0-9_-`;
+* `categories` from the marketplace vocabulary, at most three.
 
     python tools/check_manifest.py
 """
@@ -28,21 +25,40 @@ import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-API_VERSION = "0.1"
 
-# `PluginManifest`, `#[serde(deny_unknown_fields)]`, kebab-case.
+# `RawManifest`, `#[serde(deny_unknown_fields)]`, kebab-case. 0.2 only.
 ALLOWED = {
-    "id", "name", "version", "description", "authors", "homepage",
-    "change-notes", "openidea-api", "wasm", "permissions", "contributes",
+    "id", "name", "version", "description", "authors", "homepage", "license",
+    "change-notes", "categories", "engines", "wasm", "activation",
+    "capabilities", "contributes",
 }
 # Fields without `#[serde(default)]`.
-REQUIRED = {"id", "name", "version", "openidea-api"}
-# `Contribution` struct.
-ALLOWED_CONTRIBUTES = {"commands", "languages", "themes"}
-# `[[contributes.themes]]` (`ThemeDecl`).
+REQUIRED = {"id", "name", "version", "engines"}
+# `Contribution` points; a theme plugin uses `themes`.
+KNOWN_POINTS = {
+    "commands", "menus", "keymaps", "statusBar", "settings", "views",
+    "customEditors", "themes", "fileIcons", "fileTemplates", "languages",
+    "providers", "secrets", "runDetectors", "iconThemes",
+}
+# Marketplace categories (`plugins/README.md`), at most three.
+CATEGORIES = {
+    "languages", "themes", "icon-themes", "linters", "vcs", "ai",
+    "frameworks", "tools", "other",
+}
+MAX_CATEGORIES = 3
 ALLOWED_THEME_FIELDS = {"path", "editor-scheme"}
-# `Permission` enum.
-PERMISSIONS = {"project-read", "editor-read", "editor-write"}
+
+_ID_CHARS = set("abcdefghijklmnopqrstuvwxyz0123456789-_")
+_ID_FIRST = set("abcdefghijklmnopqrstuvwxyz0123456789")
+
+
+def _segment_ok(s: str) -> bool:
+    return bool(s) and s[0] in _ID_FIRST and all(c in _ID_CHARS for c in s)
+
+
+def plugin_id_ok(pid: str) -> bool:
+    """`validate_plugin_id`: `acme.tools`, each part `[a-z0-9][a-z0-9_-]*`."""
+    return 0 < len(pid) <= 64 and all(_segment_ok(seg) for seg in pid.split("."))
 
 
 def is_version(v: str) -> bool:
@@ -51,22 +67,9 @@ def is_version(v: str) -> bool:
     return len(parts) == 3 and all(p.isdigit() for p in parts)
 
 
-def api_compatible(v: str) -> bool:
-    return v == API_VERSION or v.startswith(API_VERSION + ".")
-
-
-_ID_CHARS = set("abcdefghijklmnopqrstuvwxyz0123456789-_")
-_ID_FIRST = set("abcdefghijklmnopqrstuvwxyz0123456789")
-
-
-def _segment_ok(s: str) -> bool:
-    """Mirrors `segment_ok` in the 1.x manifest: starts alphanumeric, then -/_."""
-    return bool(s) and s[0] in _ID_FIRST and all(c in _ID_CHARS for c in s)
-
-
-def plugin_id_ok(pid: str) -> bool:
-    """Mirrors `validate_plugin_id` in the 1.x manifest: `acme.tools` is valid."""
-    return 0 < len(pid) <= 64 and bool(pid) and all(_segment_ok(seg) for seg in pid.split("."))
+def engine_ok(req: str) -> bool:
+    """The plugin API this package needs must accept the 1.x API."""
+    return bool(re.match(r"^\s*(\^|>=|~)?\s*1(\.|$)", req))
 
 
 def main() -> int:
@@ -76,12 +79,17 @@ def main() -> int:
     for key in raw:
         if key not in ALLOWED:
             problems.append(
-                f"unknown field {key!r}: not in the 0.1 manifest the IDE reads. "
+                f"unknown field {key!r}: not a 0.2 manifest key. "
                 f"Allowed: {', '.join(sorted(ALLOWED))}"
             )
     for key in REQUIRED:
         if key not in raw:
             problems.append(f"missing required field {key!r}")
+    if "openidea-api" in raw:
+        problems.append(
+            "`openidea-api` is the 0.1 format; `openidea-plugin index` refuses it. "
+            "Use `engines.openidea`."
+        )
 
     if "id" in raw and not plugin_id_ok(raw["id"]):
         problems.append(
@@ -90,16 +98,29 @@ def main() -> int:
         )
     if "version" in raw and not is_version(raw["version"]):
         problems.append(f"version {raw['version']!r} must look like 1.2.3")
-    if "openidea-api" in raw and not api_compatible(str(raw["openidea-api"])):
-        problems.append(f"openidea-api {raw['openidea-api']!r} is not {API_VERSION}.x")
 
-    for perm in raw.get("permissions", []):
-        if perm not in PERMISSIONS:
-            problems.append(f"unknown permission {perm!r}; use {', '.join(sorted(PERMISSIONS))}")
+    engines = raw.get("engines")
+    if engines is not None:
+        if not isinstance(engines, dict):
+            problems.append("`engines` is a table")
+        elif "openidea" not in engines:
+            problems.append("`engines.openidea` is required, e.g. \"^1.0\"")
+        elif not engine_ok(str(engines["openidea"])):
+            problems.append(f"engines.openidea {engines['openidea']!r} does not accept API 1.x")
+
+    cats = raw.get("categories", [])
+    if not isinstance(cats, list) or not all(isinstance(c, str) for c in cats):
+        problems.append("`categories` is a list of strings")
+    else:
+        unknown = [c for c in cats if c not in CATEGORIES]
+        if unknown:
+            problems.append(f"unknown categories {unknown}; use {', '.join(sorted(CATEGORIES))}")
+        if len(cats) > MAX_CATEGORIES:
+            problems.append(f"at most {MAX_CATEGORIES} categories, got {len(cats)}")
 
     contributes = raw.get("contributes", {})
     for point in contributes:
-        if point not in ALLOWED_CONTRIBUTES:
+        if point not in KNOWN_POINTS:
             problems.append(f"unknown contribution point {point!r}")
 
     seen: set[str] = set()
@@ -115,10 +136,9 @@ def main() -> int:
             rel = theme.get(field)
             if rel is None:
                 continue
-            target = ROOT / rel
             if Path(rel).is_absolute() or ".." in Path(rel).parts:
-                problems.append(f"contributes.themes[{i}].{field}: {rel!r} must be relative to the package")
-            elif not target.is_file():
+                problems.append(f"contributes.themes[{i}].{field}: {rel!r} must stay inside the package")
+            elif not (ROOT / rel).is_file():
                 problems.append(f"contributes.themes[{i}].{field}: {rel!r} does not exist")
         path = theme.get("path")
         if path and (ROOT / path).is_file():
@@ -140,7 +160,7 @@ def main() -> int:
         print(f"FAIL {p}", file=sys.stderr)
     if problems:
         return 1
-    print(f"ok: plugin.toml is manifest format {API_VERSION}, {len(themes)} themes, all files present")
+    print(f"ok: manifest 0.2, id {raw.get('id')!r}, {len(themes)} themes, all files present")
     return 0
 
 

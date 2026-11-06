@@ -51,7 +51,7 @@ themes/catppuccin-<flavour>.scheme.json 107 个语法/编辑器/ANSI token
 tools/palette.json                      Catppuccin 官方调色板（26 色 × 4 口味 + ANSI）
 tools/tokens.txt                        OpenIDEA 的 382 个 CSS 变量名，用来防止拼错
 tools/gen_themes.py                     生成器：调色板 + 映射 → 8 个 JSON
-tools/check_manifest.py                 按 OpenIDEA 0.1.x 规则校验清单
+tools/check_manifest.py                 按注册表规则校验清单（0.2 格式）
 tools/preview.py                        渲染上面的预览图
 LICENSE-catppuccin                      Catppuccin 的 MIT 许可证
 ```
@@ -78,14 +78,19 @@ publisher 是 `muecheack`，所以 id 必须是 `muecheack.` 开头。而 0.1.x 
 `[a-z0-9][a-z0-9_-]*`（不许点），于是**签名和 0.1.x 互斥**：0.1.x 时代没有签名这条路，
 带点 id 也装不进 0.1.x。本插件因此要求 **OpenIDEA 1.x**。
 
-### 清单为什么还是 0.1 格式
+### 清单是 0.2 格式（上架必需）
 
-`plugin.toml` 用 `openidea-api = "0.1"`，不是 `engines.openidea`。1.x 会把它当 legacy
-清单读进来（`openidea-plugin check` 会提示一句 "uses the 0.1 format"），功能上没差别——
-`categories` 是**从 contributes 推导**的，贡献了 themes 就自动归到 themes 类，不用手写。
+`plugin.toml` 用 `engines.openidea = "^1.0"` + `categories` + `license`，即清单格式 **0.2**。
 
-这样文件对版本变化更宽容。想迁到 0.2 格式（`engines.openidea` + `[capabilities]`）是可选的
-清理，能换来可显式写 `categories` / `license` 两个元数据。
+0.1 格式（`openidea-api = "0.1"`）**能装但上不了架**：IDE 会当 legacy 读进来，`openidea-plugin
+check` 也只给一句提示，但社区注册表用的 `openidea-plugin index` 会直接拒绝——这是实测撞到的
+第二道关：
+
+```
+error: .../muecheack.catppuccin-1.0.0.oiplugin: plugin.toml uses the 0.1 format
+```
+
+所以想进 [openidea-plugins](https://github.com/l0ng-ai/openidea-plugins) 索引，清单必须是 0.2。
 
 ### Token 覆盖
 
@@ -107,7 +112,7 @@ openidea-plugin pack . --key muecheack.key --publisher muecheack
 ### 校验
 
 ```sh
-python tools/check_manifest.py      # 清单字段按 0.1 集，id 按 1.x 规则
+python tools/check_manifest.py      # 0.2 字段集 + id/publisher 规则 + categories
 openidea-plugin check .             # 文件夹
 openidea-plugin check *.oiplugin    # 包文件，按安装时的规则
 python tools/gen_themes.py --check  # 主题文件与生成器是否一致

@@ -1,0 +1,36 @@
+# Catppuccin for OpenIDEA.
+#
+# A theme plugin is data only: no `wasm`, no permissions, nothing to compile.
+# The package *is* this folder. `tools/gen_themes.py` writes the theme files from
+# the official palette; edit that script rather than the generated JSON.
+#
+# Manifest format 0.1 (`openidea-api`), because that is what OpenIDEA 0.1.x
+# parses, and 1.x IDEs read it as a legacy manifest. Do NOT add 1.x-only keys
+# (`categories`, `license`, `engines.openidea`) — 0.1.x rejects the whole
+# install with "unknown field".
+id = "muecheack.catppuccin"
+name = "Catppuccin Theme"
+version = "1.0.0"
+description = "Catppuccin for OpenIDEA: Latte (light) plus Frappé, Macchiato and Mocha (dark), each setting 224 themeable tokens. Palette and style guide by the Catppuccin project (MIT)."
+authors = ["Catppuccin contributors (palette and style guide)"]
+homepage = "https://catppuccin.com"
+change-notes = "1.0.0 — first release: all four flavours, UI and editor scheme."
+openidea-api = "0.1"
+
+# One entry per theme; `editor-scheme` is merged over the theme's tokens
+# (IntelliJ's .theme.json + .icls pair). Reference: docs/plugins/themes.md.
+[[contributes.themes]]
+path = "themes/catppuccin-latte.theme.json"
+editor-scheme = "themes/catppuccin-latte.scheme.json"
+
+[[contributes.themes]]
+path = "themes/catppuccin-frappe.theme.json"
+editor-scheme = "themes/catppuccin-frappe.scheme.json"
+
+[[contributes.themes]]
+path = "themes/catppuccin-macchiato.theme.json"
+editor-scheme = "themes/catppuccin-macchiato.scheme.json"
+
+[[contributes.themes]]
+path = "themes/catppuccin-mocha.theme.json"
+editor-scheme = "themes/catppuccin-mocha.scheme.json"

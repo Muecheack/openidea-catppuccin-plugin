@@ -1,0 +1,6 @@
+# Signed packages are build output: publish them as release assets, not commits.
+*.oiplugin
+
+# Publisher signing keys — `openidea-plugin keygen` writes these. NEVER commit
+# them: a leaked key lets anyone sign packages as the publisher.
+*.key

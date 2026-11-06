@@ -8,7 +8,10 @@
 # parses, and 1.x IDEs read it as a legacy manifest. Do NOT add 1.x-only keys
 # (`categories`, `license`, `engines.openidea`) — 0.1.x rejects the whole
 # install with "unknown field".
-id = "muecheack.catppuccin"
+# `muecheack-catppuccin`, not `muecheack.catppuccin`: OpenIDEA 0.1.x validates the
+# id as `[a-z0-9][a-z0-9_-]*` and rejects dots (only 1.x allows `acme.tools`).
+# A hyphen is valid in both, so this id installs on 0.1.x and on 1.x.
+id = "muecheack-catppuccin"
 name = "Catppuccin Theme"
 version = "1.0.0"
 description = "Catppuccin for OpenIDEA: Latte (light) plus Frappé, Macchiato and Mocha (dark), each setting 224 themeable tokens. Palette and style guide by the Catppuccin project (MIT)."

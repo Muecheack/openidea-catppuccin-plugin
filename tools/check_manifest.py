@@ -1,16 +1,22 @@
 #!/usr/bin/env python3
-"""Check `plugin.toml` against OpenIDEA's manifest format 0.1.
+"""Check `plugin.toml` the way the installed OpenIDEA parses it.
 
-`openidea-plugin check` ships with a newer release and happily accepts 1.x-only
-keys like `categories` and `engines.openidea`, but an installed OpenIDEA 0.1.x
-rejects the whole package with "unknown field". This script encodes the 0.1
-schema — `PluginManifest` in `crates/ide-plugin/src/manifest.rs` at v0.1.32 —
-so that keys a 0.1.x IDE does not know are caught before installing.
+`openidea-plugin check` is stricter than the IDE in no way, and it is *looser* in
+one: it accepts 1.x-only keys (`categories`, `engines.openidea`) that a 0.1.x IDE
+rejects outright with "unknown field". This script closes that gap — it encodes
+the manifest rules from the IDE's own source, so a package that would fail to
+install is caught here first.
+
+Two rule sets are mixed on purpose, because this manifest is deliberately a 0.1
+one installed on a 1.x IDE:
+
+* top-level fields — the 0.1 set (`crates/ide-plugin/src/manifest.rs` at
+  v0.1.32), so no 1.x-only key sneaks in. 1.x reads it as a legacy manifest.
+* plugin id — the 1.x rule (`crates/ide-extension/src/manifest.rs` at v0.1.37):
+  dot-separated segments, e.g. `acme.tools`. A dot is required to sign the
+  package at all, since `pack --key` only signs `<publisher>.*`.
 
     python tools/check_manifest.py
-
-OpenIDEA 0.1.32 is the version this plugin targets. A 1.x IDE reads the same
-manifest as legacy, so passing here is the narrower of the two requirements.
 """
 
 from __future__ import annotations
@@ -49,6 +55,20 @@ def api_compatible(v: str) -> bool:
     return v == API_VERSION or v.startswith(API_VERSION + ".")
 
 
+_ID_CHARS = set("abcdefghijklmnopqrstuvwxyz0123456789-_")
+_ID_FIRST = set("abcdefghijklmnopqrstuvwxyz0123456789")
+
+
+def _segment_ok(s: str) -> bool:
+    """Mirrors `segment_ok` in the 1.x manifest: starts alphanumeric, then -/_."""
+    return bool(s) and s[0] in _ID_FIRST and all(c in _ID_CHARS for c in s)
+
+
+def plugin_id_ok(pid: str) -> bool:
+    """Mirrors `validate_plugin_id` in the 1.x manifest: `acme.tools` is valid."""
+    return 0 < len(pid) <= 64 and bool(pid) and all(_segment_ok(seg) for seg in pid.split("."))
+
+
 def main() -> int:
     problems: list[str] = []
     raw = tomllib.loads((ROOT / "plugin.toml").read_text(encoding="utf-8"))
@@ -56,15 +76,18 @@ def main() -> int:
     for key in raw:
         if key not in ALLOWED:
             problems.append(
-                f"unknown field {key!r}: OpenIDEA 0.1.x rejects the install. "
+                f"unknown field {key!r}: not in the 0.1 manifest the IDE reads. "
                 f"Allowed: {', '.join(sorted(ALLOWED))}"
             )
     for key in REQUIRED:
         if key not in raw:
             problems.append(f"missing required field {key!r}")
 
-    if "id" in raw and not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,63}", raw["id"]):
-        problems.append(f"invalid plugin id {raw['id']!r}: use a-z, 0-9, '-', '_'")
+    if "id" in raw and not plugin_id_ok(raw["id"]):
+        problems.append(
+            f"invalid plugin id {raw['id']!r}: use a-z, 0-9, '-', '_' in "
+            f"'.'-separated parts (e.g. acme.tools), max 64"
+        )
     if "version" in raw and not is_version(raw["version"]):
         problems.append(f"version {raw['version']!r} must look like 1.2.3")
     if "openidea-api" in raw and not api_compatible(str(raw["openidea-api"])):

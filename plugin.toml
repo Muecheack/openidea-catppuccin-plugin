@@ -4,14 +4,16 @@
 # The package *is* this folder. `tools/gen_themes.py` writes the theme files from
 # the official palette; edit that script rather than the generated JSON.
 #
-# Manifest format 0.1 (`openidea-api`), because that is what OpenIDEA 0.1.x
-# parses, and 1.x IDEs read it as a legacy manifest. Do NOT add 1.x-only keys
-# (`categories`, `license`, `engines.openidea`) — 0.1.x rejects the whole
-# install with "unknown field".
-# `muecheack-catppuccin`, not `muecheack.catppuccin`: OpenIDEA 0.1.x validates the
-# id as `[a-z0-9][a-z0-9_-]*` and rejects dots (only 1.x allows `acme.tools`).
-# A hyphen is valid in both, so this id installs on 0.1.x and on 1.x.
-id = "muecheack-catppuccin"
+# The id is `muecheack.catppuccin`, not `muecheack-catppuccin`: `openidea-plugin
+# pack --key` only signs plugins named `<publisher>.*` (a literal prefix match,
+# dot included), and the publisher key here is `muecheack`. A dot in the id needs
+# OpenIDEA 1.x — 0.1.x validated ids as `[a-z0-9][a-z0-9_-]*` and rejected it,
+# but 0.1.x could not sign a package at all, so a signed package implies 1.x.
+#
+# Manifest format 0.1 (`openidea-api`), which 1.x IDEs still read as a legacy
+# manifest. Kept instead of `engines.openidea` so the file stays longest-lived;
+# the marketplace category is derived from `contributes` either way.
+id = "muecheack.catppuccin"
 name = "Catppuccin Theme"
 version = "1.0.0"
 description = "Catppuccin for OpenIDEA: Latte (light) plus Frappé, Macchiato and Mocha (dark), each setting 224 themeable tokens. Palette and style guide by the Catppuccin project (MIT)."

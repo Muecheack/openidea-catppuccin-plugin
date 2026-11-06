@@ -22,11 +22,12 @@
 **方式一：从磁盘安装（日常用）**
 设置 › 插件 › 齿轮 ⚙ › *Install Plugin from Disk…* → 选这个文件夹。
 
-**方式二：打成包**
+**方式二：打成签名包**
 ```sh
-openidea-plugin pack .          # → catppuccin-1.0.0.oiplugin
+openidea-plugin pack . --key muecheack.key --publisher muecheack
+# -> muecheack.catppuccin-1.0.0.oiplugin   (signed by muecheack)
 ```
-然后用 *Install Plugin from Package File…* 选它。
+然后用 *Install Plugin from Package File…* 选它。私钥只留在本机：`*.key` 已在 `.gitignore` 里。
 
 **方式三：开发模式（改颜色时用，不用反复装）**
 ```sh
@@ -60,41 +61,61 @@ IDE 安装时只复制 `plugin.toml` 引用到的文件，`tools/` 不会进插�
 
 ## 版本兼容（重要）
 
-`plugin.toml` 用的是**清单格式 0.1**（`openidea-api = "0.1"`），不是 1.x 的
-`engines.openidea`。原因：**OpenIDEA 0.1.x 用 `deny_unknown_fields` 解析清单，
-遇到一个不认识的键就整包拒绝**，报错是：
+目标版本：**OpenIDEA 0.1.37**（实测安装版本）。
 
+### id 为什么带点
+
+`id = "muecheack.catppuccin"` 里的点是**必须的**，不是风格偏好。`openidea-plugin pack
+--key` 的签名规则是字面前缀匹配：
+
+```rust
+if !manifest.id.starts_with(&format!("{publisher}.")) {
+    return Err(format!("publisher {publisher:?} may only sign plugins named {publisher}.*"));
+}
 ```
-unknown field categories, expected one of
-id, name, version, description, authors, homepage, change-notes,
-openidea-api, wasm, permissions, contributes
-```
 
-所以 0.1.x 上**不能**写 `categories`、`license`、`engines.openidea`、`[capabilities]`。
-反过来，1.x IDE 会把 0.1 清单当作 legacy 读进来（`openidea-plugin check` 只提示一句
-"uses the 0.1 format"），而且它的 `categories` 是**从 contributes 推导**的——插件贡献了
-themes 就自动归到 themes 类，所以写 0.1 格式在哪边都不吃亏。
+publisher 是 `muecheack`，所以 id 必须是 `muecheack.` 开头。而 0.1.x 把 id 校验成
+`[a-z0-9][a-z0-9_-]*`（不许点），于是**签名和 0.1.x 互斥**：0.1.x 时代没有签名这条路，
+带点 id 也装不进 0.1.x。本插件因此要求 **OpenIDEA 1.x**。
 
-- 目标版本：**OpenIDEA 0.1.32**（实测安装版本）。0.1.32 的 `theme.rs` 校验规则与
-  v0.1.37 **完全一致**，所以四个主题文件可直接用。
-- 唯一差异：`--syn-global` 是 v0.1.33+ 才有的 token。0.1.32 会忽略它，而它的默认值就是
-  `var(--syn-variable)`，两者取值相同，视觉无差别。
-- 0.1.32 → 0.1.37 只新增 10 个 token，其中 8 个是启动画面/度量
-  （`--splash-*` 等），配色相关的只有 `--syn-global`、`--bg-file-tests`、
-  `--stripe-icon-button`。**为了这套主题没必要升级。**
+### 清单为什么还是 0.1 格式
 
-两条校验命令，建议都跑：
+`plugin.toml` 用 `openidea-api = "0.1"`，不是 `engines.openidea`。1.x 会把它当 legacy
+清单读进来（`openidea-plugin check` 会提示一句 "uses the 0.1 format"），功能上没差别——
+`categories` 是**从 contributes 推导**的，贡献了 themes 就自动归到 themes 类，不用手写。
+
+这样文件对版本变化更宽容。想迁到 0.2 格式（`engines.openidea` + `[capabilities]`）是可选的
+清理，能换来可显式写 `categories` / `license` 两个元数据。
+
+### Token 覆盖
+
+0.1.37 的 `tokens.css` 含全部 **224** 个 token（包括 0.1.33 才加的 `--syn-global`），
+所以四个口味是满覆盖，不会有落空的 token。
+
+### 打包与签名
 
 ```sh
-python tools/check_manifest.py    # 按 0.1.x 的规则（你装的版本）
-openidea-plugin check .           # 按 CLI 自带的新规则
+openidea-plugin pack . --key muecheack.key --publisher muecheack
+# -> muecheack.catppuccin-1.0.0.oiplugin   (signed by muecheack)
 ```
 
-> `openidea-plugin check` 装的是较新版本，**它放行 1.x 专有键**——这正是之前
-> 安装报错没被提前发现的原因。`check_manifest.py` 专门补这个洞。
-> 如果你机器上的脚手架/CLI 比 IDE 新（本项目就是：脚手架按 v0.1.37 生成，
-> 而 IDE 是 0.1.32），它生成的项目默认是 1.x 清单，装到 0.1.32 上会报同样的错——
-> 要么升级 IDE，要么按本文件的 0.1 格式改。
+`*.key` 与 `*.oiplugin` 都在 `.gitignore` 里：**私钥绝不入库**，包发到 GitHub Releases。
+
+> 在 0.1.36+ 上，插件主题也会出现在 *设置 › 外观与行为 › 外观 › 主题* 的下拉里
+> （0.1.32–0.1.35 只能从插件页应用）。
+
+### 校验
+
+```sh
+python tools/check_manifest.py      # 清单字段按 0.1 集，id 按 1.x 规则
+openidea-plugin check .             # 文件夹
+openidea-plugin check *.oiplugin    # 包文件，按安装时的规则
+python tools/gen_themes.py --check  # 主题文件与生成器是否一致
+```
+
+> 历史坑：这个项目最初在 **0.1.32** 上装不上，因为 CLI/脚手架是 1.x 时代的，撞了三处
+> 错位——`categories` 字段、带点 id、签名命名空间。`tools/check_manifest.py` 就是当时
+> 加的守门员：`openidea-plugin check` 会放行一些旧 IDE 不认的东西，它不会。
 
 ## 映射原则
 
